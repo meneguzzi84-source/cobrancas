@@ -204,4 +204,481 @@ tr:last-child td{border-bottom:0}
   </div>
 </section>
 </main>
-<div class="watermark">Desenvolvido por Marlon Meneguzzi</div>
+<div class="watermark">Desenvolvido por Marlon Meneguzzi</div><!-- MODAIS -->
+<div class="modal hidden" id="edit-amount-modal">
+  <div class="modal-content">
+    <h2>Editar valor</h2>
+    <p id="edit-amount-client"></p>
+    <label>Novo valor<input id="edit-amount-input" type="number" min="0.01" step="0.01"></label>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="cancel-edit-amount">Cancelar</button>
+      <button class="primary" id="save-edit-amount">Salvar</button>
+    </div>
+  </div>
+</div>
+<div class="modal hidden" id="edit-client-modal">
+  <div class="modal-content">
+    <h2>Editar cliente</h2>
+    <label>Nome<input id="edit-client-input" type="text"></label>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="cancel-edit-client">Cancelar</button>
+      <button class="primary" id="save-edit-client">Salvar</button>
+    </div>
+  </div>
+</div>
+<div class="modal hidden" id="edit-description-modal">
+  <div class="modal-content">
+    <h2>Editar descrição</h2>
+    <label>Descrição<input id="edit-description-input" type="text"></label>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="cancel-edit-description">Cancelar</button>
+      <button class="primary" id="save-edit-description">Salvar</button>
+    </div>
+  </div>
+</div>
+<div class="modal hidden" id="edit-date-modal">
+  <div class="modal-content">
+    <h2>Editar vencimento</h2>
+    <p id="edit-date-client"></p>
+    <label>Nova data<input id="edit-date-input" type="date"></label>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="cancel-edit-date">Cancelar</button>
+      <button class="primary" id="save-edit-date">Salvar</button>
+    </div>
+  </div>
+</div>
+<div class="modal hidden" id="edit-credential-modal">
+  <div class="modal-content">
+    <h2>Editar credencial</h2>
+    <p id="edit-credential-client"></p>
+    <label id="edit-credential-label">Valor<input id="edit-credential-input" type="text"></label>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="cancel-edit-credential">Cancelar</button>
+      <button class="primary" id="save-edit-credential">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://vyeukjxuszzhbvyzmujz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5ZXVranh1c3p6aGJ2eXptdWp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyMjc0MjAsImV4cCI6MjEwMzgwMzQyMH0.bHPM1QlgZpr6gFfb5UzY5-vuD9pX8cvOiv0qMYHn8KU';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let charges = [];
+let activeFilter = 'all';
+let activeSearch = '';
+let activeMonth = '';
+let activeOrder = 'ascending';
+let editingId = null;
+let editingField = null;
+
+// ─── SUPABASE CRUD ────────────────────────────────────────────
+function setSync(status, text) {
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  if (dot) dot.className = 'sync-dot ' + status;
+  if (txt) txt.textContent = text;
+}
+
+async function loadCharges() {
+  setSync('loading', 'Sincronizando...');
+  try {
+    const { data, error } = await db.from('charges').select('*').order('due_date', { ascending: true });
+    if (error) throw error;
+    charges = data || [];
+    setSync('ok', 'Sincronizado ✓');
+  } catch (e) {
+    console.error(e);
+    setSync('error', 'Erro de conexão');
+    charges = JSON.parse(localStorage.getItem('cobrancas_backup') || '[]');
+  }
+  localStorage.setItem('cobrancas_backup', JSON.stringify(charges));
+  render();
+}
+
+async function insertCharge(item) {
+  setSync('loading', 'Salvando...');
+  // Remove campos nulos/vazios para não violar constraints
+  const payload = {};
+  for (const [k, v] of Object.entries(item)) {
+    if (v !== '' && v !== null && v !== undefined) payload[k] = v;
+  }
+  const { data, error } = await db.from('charges').insert([payload]).select();
+  if (error) {
+    console.error('Erro ao inserir:', error);
+    alert('Erro ao salvar: ' + error.message);
+    setSync('error', 'Erro ao salvar');
+    return false;
+  }
+  setSync('ok', 'Salvo ✓');
+  return data[0];
+}
+
+async function updateCharge(id, fields) {
+  setSync('loading', 'Atualizando...');
+  const { error } = await db.from('charges').update(fields).eq('id', id);
+  if (error) { console.error(error); setSync('error', 'Erro'); return false; }
+  setSync('ok', 'Atualizado ✓');
+  return true;
+}
+
+async function deleteCharge(id) {
+  const { error } = await db.from('charges').delete().eq('id', id);
+  if (error) { console.error(error); return false; }
+  return true;
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────
+const fmt = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const parseDate = s => s ? new Date(s + 'T00:00:00') : null;
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+function diffDays(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return null;
+  return Math.round((d - today()) / 86400000);
+}
+function countdownLabel(diff) {
+  if (diff === null) return '';
+  if (diff < 0) return `${Math.abs(diff)}d em atraso`;
+  if (diff === 0) return 'Vence hoje';
+  return `${diff}d restantes`;
+}
+function statusOf(c) {
+  if (c.paid) return 'paid';
+  const d = diffDays(c.due_date);
+  if (d !== null && d < 0) return 'overdue';
+  return 'pending';
+}
+
+// ─── RENDER ──────────────────────────────────────────────────
+function render() {
+  updateSummary();
+  renderList();
+  renderForecast();
+  renderMonthlyReport();
+}
+
+function updateSummary() {
+  const open = charges.filter(c => !c.paid);
+  const overdue = charges.filter(c => statusOf(c) === 'overdue');
+  const paid = charges.filter(c => c.paid);
+  const t = today(); const t7 = new Date(t); t7.setDate(t7.getDate() + 7);
+  const week = charges.filter(c => {
+    if (c.paid) return false;
+    const d = parseDate(c.due_date);
+    return d && d >= t && d <= t7;
+  });
+  document.getElementById('total-receivable').textContent = fmt(open.reduce((s,c)=>s+Number(c.amount),0));
+  document.getElementById('open-count').textContent = `${open.length} em aberto`;
+  document.getElementById('total-overdue').textContent = fmt(overdue.reduce((s,c)=>s+Number(c.amount),0));
+  document.getElementById('overdue-count').textContent = `${overdue.length} vencidas`;
+  document.getElementById('total-week').textContent = fmt(week.reduce((s,c)=>s+Number(c.amount),0));
+  document.getElementById('week-count').textContent = `${week.length} cobranças`;
+  document.getElementById('total-paid').textContent = fmt(paid.reduce((s,c)=>s+Number(c.amount),0));
+  document.getElementById('paid-count').textContent = `${paid.length} pagas`;
+}
+
+function getFiltered() {
+  let list = [...charges];
+  if (activeFilter === 'pending') list = list.filter(c => statusOf(c) === 'pending');
+  else if (activeFilter === 'overdue') list = list.filter(c => statusOf(c) === 'overdue');
+  else if (activeFilter === 'paid') list = list.filter(c => c.paid);
+  if (activeSearch) list = list.filter(c => c.client?.toLowerCase().includes(activeSearch.toLowerCase()));
+  if (activeMonth) list = list.filter(c => c.due_date?.startsWith(activeMonth));
+  list.sort((a, b) => {
+    if (activeOrder === 'ascending') return (a.due_date||'') > (b.due_date||'') ? 1 : -1;
+    if (activeOrder === 'descending') return (a.due_date||'') < (b.due_date||'') ? 1 : -1;
+    if (activeOrder === 'client-ascending') return (a.client||'').localeCompare(b.client||'');
+    if (activeOrder === 'client-descending') return (b.client||'').localeCompare(a.client||'');
+    return 0;
+  });
+  return list;
+}
+
+function renderList() {
+  const list = getFiltered();
+  const tbody = document.getElementById('charges-body');
+  document.getElementById('list-count').textContent = `${list.length} cobrança(s) exibida(s)`;
+  const uniqueClients = [...new Set(charges.map(c => c.client))].length;
+  document.getElementById('clients-counter').innerHTML = `<strong>${uniqueClients}</strong> clientes cadastrados`;
+  const openCharges = charges.filter(c => !c.paid);
+  const avg = uniqueClients > 0 ? openCharges.reduce((s,c)=>s+Number(c.amount),0) / uniqueClients : 0;
+  document.getElementById('average-per-client').textContent = `Média por cliente: ${fmt(avg)}`;
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">Nenhuma cobrança encontrada.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(c => {
+    const diff = diffDays(c.due_date);
+    const st = statusOf(c);
+    const cdClass = st === 'overdue' ? 'overdue' : diff !== null && diff <= 3 ? 'warning' : '';
+    const entryFmt = c.entry_date ? parseDate(c.entry_date).toLocaleDateString('pt-BR') : '—';
+    const dueFmt = c.due_date ? parseDate(c.due_date).toLocaleDateString('pt-BR') : '—';
+    return `<tr>
+      <td><div class="client">
+        <div class="client-name"><strong>${c.client||''}</strong></div>
+        <div class="client-description">${c.description||''}</div>
+      </div></td>
+      <td>${c.username||'—'}</td>
+      <td>${c.password||'—'}</td>
+      <td><div class="amount-cell"><span class="amount">${fmt(Number(c.amount))}</span></div></td>
+      <td>${entryFmt}</td>
+      <td><div class="due">${dueFmt}<span class="countdown ${cdClass}">${!c.paid ? countdownLabel(diff) : ''}</span></div></td>
+      <td><div class="status-cell"><span class="badge ${st}">${st==='paid'?'Pago':st==='overdue'?'Atrasado':'Pendente'}</span></div></td>
+      <td><div class="actions">
+        ${!c.paid ? `<button class="action pay" onclick="markPaid('${c.id}')">✓ Pago</button>` : `<button class="action" onclick="markUnpaid('${c.id}')">Desfazer</button>`}
+        <button class="action" onclick="openEditAmount('${c.id}')">Valor</button>
+        <button class="action" onclick="openEditDate('${c.id}')">Data</button>
+        <button class="action" onclick="openEditClient('${c.id}')">Cliente</button>
+        <button class="action" onclick="openEditDescription('${c.id}')">Descrição</button>
+        <button class="action" onclick="openEditCredential('${c.id}','username')">Usuário</button>
+        <button class="action" onclick="openEditCredential('${c.id}','password')">Senha</button>
+        <button class="action delete" onclick="removeCharge('${c.id}')">✕</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderForecast() {
+  const t = today(); const t7 = new Date(t); t7.setDate(t7.getDate()+7);
+  const list = charges.filter(c => {
+    if (c.paid) return false;
+    const d = parseDate(c.due_date);
+    return d && d <= t7;
+  }).sort((a,b) => (a.due_date||'') > (b.due_date||'') ? 1 : -1);
+  const el = document.getElementById('weekly-forecast-list');
+  if (!list.length) { el.innerHTML = `<p class="empty">Nenhuma cobrança vence nos próximos 7 dias.</p>`; return; }
+  el.innerHTML = list.map(c => {
+    const diff = diffDays(c.due_date);
+    const dueFmt = c.due_date ? parseDate(c.due_date).toLocaleDateString('pt-BR') : '—';
+    const cdClass = diff !== null && diff < 0 ? 'overdue' : diff !== null && diff <= 3 ? 'warning' : '';
+    return `<div class="forecast-item">
+      <div>
+        <div class="forecast-client">${c.client||''}</div>
+        <div class="forecast-detail">${c.description||''} — Vence: ${dueFmt}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:18px">
+        <span class="forecast-countdown ${cdClass}">${countdownLabel(diff)}</span>
+        <span class="amount">${fmt(Number(c.amount))}</span>
+        <div class="forecast-actions">
+          <button class="action pay" onclick="markPaid('${c.id}')">✓ Pago</button>
+          <button class="action" onclick="openEditAmount('${c.id}')">Editar valor</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMonthlyReport() {
+  const groups = {};
+  charges.forEach(c => {
+    const key = c.due_date ? c.due_date.slice(0,7) : 'Sem data';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  });
+  const tbody = document.getElementById('monthly-report-body');
+  const keys = Object.keys(groups).sort();
+  if (!keys.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty">Sem dados.</td></tr>`; return; }
+  tbody.innerHTML = keys.map(key => {
+    const list = groups[key];
+    const total = list.reduce((s,c)=>s+Number(c.amount),0);
+    const rec = list.filter(c=>c.paid).reduce((s,c)=>s+Number(c.amount),0);
+    const pend = list.filter(c=>statusOf(c)==='pending').reduce((s,c)=>s+Number(c.amount),0);
+    const over = list.filter(c=>statusOf(c)==='overdue').reduce((s,c)=>s+Number(c.amount),0);
+    const label = key === 'Sem data' ? key : new Date(key+'-01').toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+    return `<tr>
+      <td>${label}</td>
+      <td>${fmt(total)}</td>
+      <td style="color:var(--green)">${fmt(rec)}</td>
+      <td style="color:var(--amber)">${fmt(pend)}</td>
+      <td style="color:var(--red)">${fmt(over)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── AÇÕES ───────────────────────────────────────────────────
+async function markPaid(id) {
+  const ok = await updateCharge(id, { paid: true });
+  if (ok) { charges = charges.map(c => c.id==id ? {...c, paid:true} : c); render(); }
+}
+async function markUnpaid(id) {
+  const ok = await updateCharge(id, { paid: false });
+  if (ok) { charges = charges.map(c => c.id==id ? {...c, paid:false} : c); render(); }
+}
+async function removeCharge(id) {
+  if (!confirm('Excluir esta cobrança?')) return;
+  const ok = await deleteCharge(id);
+  if (ok) { charges = charges.filter(c => c.id != id); render(); }
+}
+
+// ─── MODAIS DE EDIÇÃO ────────────────────────────────────────
+function openEditAmount(id) {
+  const c = charges.find(x=>x.id==id); if(!c) return;
+  editingId=id;
+  document.getElementById('edit-amount-client').textContent = c.client;
+  document.getElementById('edit-amount-input').value = c.amount;
+  document.getElementById('edit-amount-modal').classList.remove('hidden');
+}
+function openEditDate(id) {
+  const c = charges.find(x=>x.id==id); if(!c) return;
+  editingId=id;
+  document.getElementById('edit-date-client').textContent = c.client;
+  document.getElementById('edit-date-input').value = c.due_date||'';
+  document.getElementById('edit-date-modal').classList.remove('hidden');
+}
+function openEditClient(id) {
+  const c = charges.find(x=>x.id==id); if(!c) return;
+  editingId=id;
+  document.getElementById('edit-client-input').value = c.client||'';
+  document.getElementById('edit-client-modal').classList.remove('hidden');
+}
+function openEditDescription(id) {
+  const c = charges.find(x=>x.id==id); if(!c) return;
+  editingId=id;
+  document.getElementById('edit-description-input').value = c.description||'';
+  document.getElementById('edit-description-modal').classList.remove('hidden');
+}
+function openEditCredential(id, field) {
+  const c = charges.find(x=>x.id==id); if(!c) return;
+  editingId=id; editingField=field;
+  document.getElementById('edit-credential-client').textContent = c.client;
+  document.getElementById('edit-credential-label').firstChild.textContent = field==='username'?'Usuário':'Senha';
+  document.getElementById('edit-credential-input').value = c[field]||'';
+  document.getElementById('edit-credential-modal').classList.remove('hidden');
+}
+
+document.getElementById('save-edit-amount').onclick = async () => {
+  const v = parseFloat(document.getElementById('edit-amount-input').value);
+  if (!v || v<=0) return;
+  const ok = await updateCharge(editingId, {amount:v});
+  if (ok) { charges = charges.map(c=>c.id==editingId?{...c,amount:v}:c); render(); }
+  document.getElementById('edit-amount-modal').classList.add('hidden');
+};
+document.getElementById('cancel-edit-amount').onclick = () => document.getElementById('edit-amount-modal').classList.add('hidden');
+
+document.getElementById('save-edit-date').onclick = async () => {
+  const v = document.getElementById('edit-date-input').value;
+  if (!v) return;
+  const ok = await updateCharge(editingId, {due_date:v});
+  if (ok) { charges = charges.map(c=>c.id==editingId?{...c,due_date:v}:c); render(); }
+  document.getElementById('edit-date-modal').classList.add('hidden');
+};
+document.getElementById('cancel-edit-date').onclick = () => document.getElementById('edit-date-modal').classList.add('hidden');
+
+document.getElementById('save-edit-client').onclick = async () => {
+  const v = document.getElementById('edit-client-input').value.trim();
+  if (!v) return;
+  const ok = await updateCharge(editingId, {client:v});
+  if (ok) { charges = charges.map(c=>c.id==editingId?{...c,client:v}:c); render(); }
+  document.getElementById('edit-client-modal').classList.add('hidden');
+};
+document.getElementById('cancel-edit-client').onclick = () => document.getElementById('edit-client-modal').classList.add('hidden');
+
+document.getElementById('save-edit-description').onclick = async () => {
+  const v = document.getElementById('edit-description-input').value.trim();
+  const ok = await updateCharge(editingId, {description:v});
+  if (ok) { charges = charges.map(c=>c.id==editingId?{...c,description:v}:c); render(); }
+  document.getElementById('edit-description-modal').classList.add('hidden');
+};
+document.getElementById('cancel-edit-description').onclick = () => document.getElementById('edit-description-modal').classList.add('hidden');
+
+document.getElementById('save-edit-credential').onclick = async () => {
+  const v = document.getElementById('edit-credential-input').value.trim();
+  const ok = await updateCharge(editingId, {[editingField]:v});
+  if (ok) { charges = charges.map(c=>c.id==editingId?{...c,[editingField]:v}:c); render(); }
+  document.getElementById('edit-credential-modal').classList.add('hidden');
+};
+document.getElementById('cancel-edit-credential').onclick = () => document.getElementById('edit-credential-modal').classList.add('hidden');
+
+// ─── FILTROS E BUSCA ─────────────────────────────────────────
+document.querySelectorAll('.filter').forEach(btn => {
+  btn.onclick = () => {
+    activeFilter = btn.dataset.filter;
+    document.querySelectorAll('.filter').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderList();
+  };
+});
+document.getElementById('client-search').oninput = e => { activeSearch=e.target.value; renderList(); };
+document.getElementById('month-search').oninput = e => { activeMonth=e.target.value; renderList(); };
+document.getElementById('due-order').onchange = e => { activeOrder=e.target.value; renderList(); };
+
+// ─── EXPORTAR / IMPORTAR EXCEL ───────────────────────────────
+document.getElementById('export-excel').onclick = () => {
+  const rows = charges.map(c=>({
+    Cliente:c.client, Usuário:c.username, Senha:c.password,
+    Descrição:c.description, Valor:c.amount,
+    Entrada:c.entry_date, Vencimento:c.due_date,
+    Status:statusOf(c)==='paid'?'Pago':statusOf(c)==='overdue'?'Atrasado':'Pendente'
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cobranças');
+  XLSX.writeFile(wb, 'cobrancas.xlsx');
+};
+document.getElementById('import-excel').onclick = () => document.getElementById('import-excel-file').click();
+document.getElementById('import-excel-file').onchange = async (e) => {
+  const file = e.target.files[0]; if(!file) return;
+  const data = await file.arrayBuffer();
+  const wb = XLSX.read(data);
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  for (const row of rows) {
+    const item = {
+      client: row['Cliente']||'',
+      username: row['Usuário']||'',
+      password: row['Senha']||'',
+      description: row['Descrição']||'',
+      amount: parseFloat(row['Valor'])||0,
+      entry_date: row['Entrada']||'',
+      due_date: row['Vencimento']||'',
+      paid: row['Status']==='Pago'
+    };
+    await insertCharge(item);
+  }
+  await loadCharges();
+};
+
+// ─── LIMPAR TODAS ────────────────────────────────────────────
+document.getElementById('clear-all-charges').onclick = async () => {
+  if (!confirm('Deseja excluir TODAS as cobranças? Esta ação não pode ser desfeita.')) return;
+  for (const c of charges) await deleteCharge(c.id);
+  charges = [];
+  render();
+  setSync('ok', 'Limpo ✓');
+};
+
+// ─── FORMULÁRIO NOVO CLIENTE ─────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('today').textContent = new Date().toLocaleDateString('pt-BR');
+  loadCharges();
+
+  document.getElementById('charge-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const newEntry = {
+      client:      document.getElementById('client').value.trim(),
+      username:    document.getElementById('username').value.trim(),
+      password:    document.getElementById('password').value.trim(),
+      description: document.getElementById('description').value.trim(),
+      amount:      parseFloat(document.getElementById('amount').value),
+      entry_date:  document.getElementById('entry-date').value || new Date().toISOString().split('T')[0],
+      due_date:    document.getElementById('due-date').value,
+      paid:        false
+    };
+    const saved = await insertCharge(newEntry);
+    if (saved) {
+      charges.push(saved);
+      render();
+      e.target.reset();
+      const msg = document.getElementById('message');
+      msg.textContent = '✓ Cobrança adicionada com sucesso!';
+      setTimeout(() => msg.textContent = '', 3000);
+    }
+    await loadCharges();
+  };
+});
+</script>
+</body>
+</html>
