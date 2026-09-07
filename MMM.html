@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cobranças</title>
+<style>
+:root{color-scheme:dark;--ink:#edf4f2;--muted:#9ba9ad;--line:#314047;--paper:#172126;--canvas:#0d1418;--teal:#20b9a5;--teal-dark:#159280;--green:#73d49d;--green-bg:#183e2c;--amber:#f3c969;--amber-bg:#4c3a13;--red:#ff9ca5;--red-bg:#4d2028;--radius:8px;font-family:Georgia,'Times New Roman',serif;color:var(--ink)}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(rgba(7,22,16,.82),rgba(7,22,16,.82)) center/cover fixed no-repeat}
+button,input,select{font:inherit}
+button{cursor:pointer}
+.app{max-width:1800px;margin:0 auto;padding:36px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:28px}
+.brand{display:flex;align-items:center;gap:13px}
+.brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:8px;background:var(--teal);color:#06231f;font-size:1.35rem;font-weight:700}
+.brand h1{margin:0;color:var(--green);font-size:1.5rem}
+.brand p{margin:3px 0 0;color:var(--muted);font-family:Arial,sans-serif;font-size:.85rem}
+.today{color:var(--muted);font-family:Arial,sans-serif;font-size:.85rem}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:28px}
+.metric{min-height:150px;padding:24px;background:var(--paper);border:1px solid var(--line);border-top:4px solid var(--teal);border-radius:var(--radius)}
+.metric.overdue{border-top-color:var(--red)}
+.metric.paid{border-top-color:var(--green)}
+.metric small{display:block;color:var(--green);font-family:Arial,sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.metric strong{display:block;margin-top:14px;font-size:1.6rem}
+.metric span{display:block;margin-top:5px;color:var(--muted);font-family:Arial,sans-serif;font-size:.78rem}
+.weekly-forecast{padding:26px 28px;margin-bottom:28px}
+.forecast-list{display:grid;gap:12px}
+.forecast-item{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px;border:1px solid #314047;border-radius:5px;background:#111a1f}
+.forecast-client{color:var(--amber);font-size:.95rem;font-weight:700}
+.forecast-detail{margin-top:3px;color:var(--muted);font-family:Arial,sans-serif;font-size:.78rem}
+.forecast-countdown{color:var(--amber);font-weight:700}
+.forecast-actions{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius)}
+.new-charge{padding:28px;margin-bottom:28px}
+.section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:18px}
+h2{margin:0;color:var(--green);font-size:1.16rem}
+.section-heading p{margin:0;color:var(--muted);font-family:Arial,sans-serif;font-size:.82rem}
+.sub-calc{margin-top:4px!important;color:var(--muted);font-family:Arial,sans-serif;font-size:.75rem}
+.form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;align-items:end}
+label{display:grid;gap:7px;color:var(--green);font-family:Arial,sans-serif;font-size:.78rem;font-weight:700}
+input,select{min-height:42px;width:100%;padding:9px 11px;border:1px solid #405159;border-radius:5px;color:var(--ink);background:#0e171b;outline:none}
+input:focus,select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(32,185,165,.16)}
+.primary{min-height:42px;padding:0 18px;border:1px solid var(--teal);border-radius:5px;color:#06231f;background:var(--teal);font-family:Arial,sans-serif;font-size:.86rem;font-weight:700}
+.primary:hover{background:var(--teal-dark)}
+.list-panel{overflow:hidden}
+.list-top{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:26px 28px;border-bottom:1px solid var(--line)}
+.list-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:12px}
+.filters{display:flex;gap:8px}
+.search-control{min-height:32px;width:180px;padding:5px 9px;font-family:Arial,sans-serif;font-size:.76rem}
+.sort-control{display:flex;align-items:center;gap:7px;color:var(--green);font-family:Arial,sans-serif;font-size:.76rem;font-weight:700}
+.sort-control select{min-height:32px;width:auto;padding:5px 8px;font-size:.76rem}
+.export-button{min-height:32px;padding:0 10px;border:1px solid #267a70;border-radius:4px;color:#6ee2d1;background:#143c39;font-family:Arial,sans-serif;font-size:.76rem;font-weight:700}
+.export-button:hover{background:#1a504b}
+.clear-all-button{min-height:32px;padding:0 10px;border:1px solid #82414b;border-radius:4px;color:var(--red);background:#32181e;font-family:Arial,sans-serif;font-size:.76rem;font-weight:700}
+.clear-all-button:hover{background:#4d2028}
+.filter{padding:7px 10px;border:1px solid transparent;border-radius:4px;color:var(--muted);background:transparent;font-family:Arial,sans-serif;font-size:.78rem;font-weight:700}
+.filter.active{border-color:#267a70;color:#6ee2d1;background:#143c39}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:1400px}
+th,td{padding:18px 24px;text-align:left;border-bottom:1px solid #29373d}
+th{color:var(--green);background:#111a1f;font-family:Arial,sans-serif;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase}
+td{font-family:Arial,sans-serif;font-size:.88rem}
+#charges-body tr:nth-child(odd){background:#132126}
+#charges-body tr:nth-child(even){background:#192b31}
+#charges-body tr:hover{background:#1d393b}
+#monthly-report-body tr:nth-child(odd){background:#132126}
+#monthly-report-body tr:nth-child(even){background:#192b31}
+#monthly-report-body tr:hover{background:#1d393b}
+tr:last-child td{border-bottom:0}
+.client{display:grid;gap:3px}
+.client-name{display:flex;align-items:center;gap:8px}
+.client strong{color:var(--amber);font-family:Georgia,serif;font-size:.98rem;font-weight:700}
+.client-description{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.77rem}
+.due{color:var(--muted);font-size:.77rem}
+.countdown{display:block;margin-top:4px;color:var(--green);font-size:.72rem;font-weight:700}
+.countdown.warning{color:var(--amber)}
+.countdown.overdue{color:var(--red)}
+.amount{font-weight:700}
+.amount-cell{display:flex;align-items:center;gap:8px}
+.badge{display:inline-flex;padding:5px 8px;border-radius:4px;font-size:.73rem;font-weight:700}
+.badge.pending{color:var(--amber);background:var(--amber-bg)}
+.badge.overdue{color:var(--red);background:var(--red-bg)}
+.badge.paid{color:var(--green);background:var(--green-bg)}
+.status-cell{display:flex;align-items:center;gap:8px}
+.actions{display:flex;gap:7px}
+.action{min-height:30px;padding:0 8px;border:1px solid #46575e;border-radius:4px;color:#d1dcdd;background:#1d292e;font-family:Arial,sans-serif;font-size:.73rem;font-weight:700}
+.action.pay{border-color:#397757;color:var(--green)}
+.action.delete{border-color:#82414b;color:var(--red)}
+.empty{padding:48px 20px;color:var(--muted);text-align:center;font-family:Arial,sans-serif;font-size:.9rem}
+.clients-counter{padding:10px 28px;border-top:1px solid var(--line);color:var(--muted);font-family:Arial,sans-serif;font-size:.76rem;text-align:right}
+.clients-counter strong{color:var(--green)}
+.message{min-height:20px;margin-top:12px;color:var(--teal);font-family:Arial,sans-serif;font-size:.8rem}
+.monthly-report{margin-top:28px;overflow:hidden}
+.modal{position:fixed;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.68);z-index:10}
+.modal.hidden{display:none}
+.modal-content{width:min(100%,360px);padding:22px;background:#172126;border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.modal-content h2{margin-bottom:8px}
+.modal-content p{margin:0 0 18px;color:var(--muted);font-family:Arial,sans-serif;font-size:.84rem}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.modal-cancel{min-height:38px;padding:0 12px;border:1px solid #46575e;border-radius:4px;color:#d1dcdd;background:#1d292e;font-family:Arial,sans-serif;font-size:.8rem;font-weight:700}
+.watermark{padding:0 28px 22px;color:rgba(237,244,242,.38);font-family:Arial,sans-serif;font-size:.68rem;letter-spacing:.04em;text-align:center}
+.sync-status{display:inline-flex;align-items:center;gap:6px;font-family:Arial,sans-serif;font-size:.75rem;color:var(--muted)}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.sync-dot.ok{background:var(--green)}
+.sync-dot.error{background:var(--red)}
+.sync-dot.loading{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@media(max-width:900px){.summary{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.app{padding:16px}.topbar{flex-direction:column;gap:10px}.summary{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.list-top{flex-direction:column}.search-control{width:100%}}
+</style>
+</head>
+<body>
+<main class="app">
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">C</div>
+    <div><h1>Cobranças</h1><p>Gestão simples de valores a receber</p></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <span class="sync-status" id="sync-status">
+      <span class="sync-dot loading" id="sync-dot"></span>
+      <span id="sync-text">Conectando...</span>
+    </span>
+    <time class="today" id="today"></time>
+  </div>
+</header>
+
+<section class="summary">
+  <article class="metric"><small>Total a receber</small><strong id="total-receivable">R$ 0,00</strong><span id="open-count">0 cobranças em aberto</span></article>
+  <article class="metric overdue"><small>Em atraso</small><strong id="total-overdue">R$ 0,00</strong><span id="overdue-count">0 vencidas</span></article>
+  <article class="metric"><small>Vence esta semana</small><strong id="total-week">R$ 0,00</strong><span id="week-count">0 cobranças</span></article>
+  <article class="metric paid"><small>Recebido</small><strong id="total-paid">R$ 0,00</strong><span id="paid-count">0 pagas</span></article>
+</section>
+
+<section class="panel weekly-forecast">
+  <div class="section-heading"><div><h2>Previsão: vence esta semana</h2><p>Vencidas e próximas dos 7 dias.</p></div></div>
+  <div class="forecast-list" id="weekly-forecast-list"></div>
+</section>
+
+<section class="panel new-charge">
+  <div class="section-heading"><div><h2>Nova cobrança</h2><p>Registre um novo valor a receber.</p></div></div>
+  <form id="charge-form" class="form-grid">
+    <label>Cliente<input id="client" required placeholder="Nome do cliente"></label>
+    <label>Usuário<input id="username" placeholder="Nome de usuário"></label>
+    <label>Senha<input id="password" type="text" placeholder="Senha de acesso"></label>
+    <label>Descrição<input id="description" placeholder="Ex: P2P, Site..."></label>
+    <label>Valor<input id="amount" type="number" min="0" step="0.01" required placeholder="0,00"></label>
+    <label>Data de entrada<input id="entry-date" type="date"></label>
+    <label>Vencimento<input id="due-date" required type="date"></label>
+    <button class="primary" type="submit">Adicionar</button>
+  </form>
+  <div class="message" id="message"></div>
+</section>
+
+<section class="panel list-panel">
+  <div class="list-top">
+    <div class="section-heading" style="margin-bottom:0">
+      <div>
+        <h2>Suas cobranças</h2>
+        <p id="list-count">Carregando...</p>
+        <p id="average-per-client" class="sub-calc">Média por cliente: R$ 0,00</p>
+      </div>
+    </div>
+    <div class="list-controls">
+      <nav class="filters">
+        <button class="filter active" type="button" data-filter="all">Todas</button>
+        <button class="filter" type="button" data-filter="pending">Pendentes</button>
+        <button class="filter" type="button" data-filter="overdue">Atrasadas</button>
+        <button class="filter" type="button" data-filter="paid">Pagas</button>
+      </nav>
+      <input class="search-control" id="client-search" type="search" placeholder="Pesquisar cliente">
+      <input class="search-control" id="month-search" type="month" title="Filtrar por mês">
+      <label class="sort-control" for="due-order">Ordenar
+        <select id="due-order">
+          <option value="ascending">Vencimento: mais próximo</option>
+          <option value="descending">Vencimento: mais distante</option>
+          <option value="client-ascending">Cliente: A-Z</option>
+          <option value="client-descending">Cliente: Z-A</option>
+        </select>
+      </label>
+      <input id="import-excel-file" type="file" accept=".xlsx,.xls,.csv" hidden>
+      <button class="export-button" id="import-excel" type="button">Importar Excel</button>
+      <button class="export-button" id="export-excel" type="button">Exportar Excel</button>
+      <button class="clear-all-button" id="clear-all-charges" type="button">Limpar todas</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Cliente</th><th>Usuário</th><th>Senha</th><th>Valor</th><th>Entrada</th><th>Vencimento</th><th>Status</th><th>Ações</th></tr></thead>
+      <tbody id="charges-body"></tbody>
+    </table>
+  </div>
+  <div class="clients-counter" id="clients-counter">0 clientes</div>
+</section>
+
+<section class="panel monthly-report">
+  <div class="section-heading" style="padding:26px 28px 0"><div><h2>Relatório mensal</h2><p>Valores agrupados pelo mês de vencimento.</p></div></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Mês</th><th>Total previsto</th><th>Recebido</th><th>Pendente</th><th>Em atraso</th></tr></thead>
+      <tbody id="monthly-report-body"></tbody>
+    </table>
+  </div>
+</section>
+</main>
+<div class="watermark">Desenvolvido por Marlon Meneguzzi</div>
